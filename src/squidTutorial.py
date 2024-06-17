@@ -10,6 +10,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 VIZGEN_PATH = "/home/dati/merfish_mouse_brain/BrainReceptorShowcase/Slice1/Replicate1/"
+
+
 def tutorialMerfishData():
     sc.logging.print_header()
     print(f"squidpy=={sq.__version__}")
@@ -157,23 +159,24 @@ def tutorialMerfishData():
     """
     # Let's first compute the Moran's I index
     sq.gr.spatial_autocorr(adata_slice,
-                           mode="moran",)
+                           mode="moran", )
     print("\033[36mThese are the genes that have the highest moran I: \033[37m\n", \
-          adata_slice.uns["moranI"].sort_values(by="I",ascending=False).head(10), end="\n" + "%" * 10 + "\n")
+          adata_slice.uns["moranI"].sort_values(by="I", ascending=False).head(10), end="\n" + "%" * 10 + "\n")
     sq.pl.spatial_scatter(adata_slice,
                           shape=None,
-                          color=["Nnat","Sln","Cd24a"],
+                          color=["Nnat", "Sln", "Cd24a"],
                           size=3)
     plt.show()
     sq.gr.spatial_autocorr(adata_slice,
-                           mode="geary",)
+                           mode="geary", )
     print("\033[36mThese are the genes that have the lowest geary C: \033[37m\n", \
-          adata_slice.uns["gearyC"].sort_values(by="C",ascending=True).head(10), end="\n" + "%" * 10 + "\n")
+          adata_slice.uns["gearyC"].sort_values(by="C", ascending=True).head(10), end="\n" + "%" * 10 + "\n")
     sq.pl.spatial_scatter(adata_slice,
                           shape=None,
-                          color=["Nnat","Sln","Cd24a"], # the 3 lowest geary C are the 3 highest moran I
+                          color=["Nnat", "Sln", "Cd24a"],  # the 3 lowest geary C are the 3 highest moran I
                           size=3)
     plt.show()
+
 
 def tutorialVizgenData(path: str):
     """
@@ -191,16 +194,16 @@ def tutorialVizgenData(path: str):
     adata = sq.read.vizgen(path=VIZGEN_PATH,
                            counts_file="cell_by_gene_S1R1.csv",
                            meta_file="cell_metadata_S1R1.csv",
-                           transformation_file="micron_to_mosaic_pixel_transform.csv",)
+                           transformation_file="micron_to_mosaic_pixel_transform.csv", )
     print("\033[36mThese are the observation column names: \033[37m\n", \
           adata.obs.columns)
     print("\033[36mThese are the observation names (cells?): \033[37m\n", \
-          adata.obs_names) # 78329 unique cells?
+          adata.obs_names)  # 78329 unique cells?
     print("\033[36mThese are the var names (genes?): \033[37m\n", \
-          adata.var_names) # 483 unique genes
+          adata.var_names)  # 483 unique genes
     print("\033[36mWhat is fov? Field of view? Capiamo...: \033[37m\n", \
           adata.obs["fov"], "\n",
-          type(adata.obs["fov"])) # seems to be the ids of where in the slice the cell is
+          type(adata.obs["fov"]))  # seems to be the ids of where in the slice the cell is
 
     # Calculate the quality control metrics
     """
@@ -226,23 +229,24 @@ def tutorialVizgenData(path: str):
                 log1p_total_counts: ...
     """
     sc.pp.calculate_qc_metrics(adata,
-                               percent_top=(50,100,200,300),
+                               percent_top=(50, 100, 200, 300),
                                inplace=True)
+    sns.jointplot(data=adata.obs,
+                  x="log1p_total_counts",
+                  y="log1p_n_genes_by_counts",
+                  kind="hex")
     print("\033[36madata after having calculated qc metrics (new field in var or uns?): \033[37m\n", \
           adata)
     print("\033[36mPercentage of blank genes: \033[37m\n", \
-          adata.obsm["blank_genes"].to_numpy().sum() / adata.var["total_counts"].sum() * 100) # can be used to estimate FDR
+          adata.obsm["blank_genes"].to_numpy().sum() / adata.var["total_counts"].sum() * 100)
+    # this percentage can be used to estimate FDR
     """
-    What are the blank genes?
-        they are unassigned transcripts
-    """
-
-    # Let's plot distribution of transcripts per cell, etc..
-    fig, axs = plt.subplots(4,1, figsize=(16,9))
+    What are the blank genes? they are unassigned transcripts """  # Let's plot distribution of transcripts per cell, etc..
+    fig, axs = plt.subplots(4, 1, figsize=(16, 9))
     axs[0].set_title("Total transcripts per cell")
     sns.histplot(data=adata.obs["total_counts"],
                  ax=axs[0],
-                 kde=False,)
+                 kde=False, )
     axs[1].set_title("Unique transcripts per cell")
     sns.histplot(data=adata.obs["n_genes_by_counts"],
                  ax=axs[1],
@@ -251,12 +255,167 @@ def tutorialVizgenData(path: str):
     sns.histplot(data=adata.obs.groupby("fov").sum()["total_counts"],
                  ax=axs[2],
                  kde=False, )
-    axs[3].set_title("Volume of segmented cells") # metti unità di misura
+    axs[3].set_title("Volume of segmented cells")  # metti unità di misura
     sns.histplot(data=adata.obs["volume"],
                  ax=axs[3],
                  kde=False)
     plt.subplots_adjust(hspace=0.5)
     plt.show()
+
+    """
+    All the cells that do not contain at least 10 transcripts are filtered out with sc.pp.filter_cells
+    Also the genes can be similarly filtered with sc.pp.filter_genes.
+    """
+    sc.pp.filter_cells(adata, min_counts=10)
+
+    """
+    After the filtering, one can proceed with the preprocessing and try to understand the following. 
+    We would like to reduce the dimensionality, however, the PCA needs to be applied over normalized values. 
+    -> Normalization:  sc.pp.normalize_total() 
+        normalize counts per cell. Normalize each cell by total counts over all genes, so that every cell has the same
+        total count after normalization. If choosing `target_sum=1e6`, this is CPM normalization.
+        If `exclude_highly_expressed=True`, very highly expressed genes are excluded from the computation of the
+        normalization factor (size factor) for each cell. This is meaningful as these can strongly influence the
+        resulting normalized values for all other genes.
+        similar functions...
+            Seurat
+            Cell Ranger
+            SPRING
+    """
+    # We copy the X layer and call it "counts"
+    adata.layers["counts"] = adata.X.copy()
+    # We evaluate the highly-variable-genes
+    sc.pp.highly_variable_genes(adata,
+                                flavor="seurat_v3",
+                                n_top_genes=4000)
+    sc.pp.normalize_total(adata, inplace=True)  # normalize
+    sc.pp.log1p(adata)  # transform
+    sc.pp.pca(adata)  # principal coordinate analysis
+    sc.pp.neighbors(adata)  # evaluate the neighborhood graph. K-NN?
+    sc.tl.umap(adata)  # visualize the reduced dimensionality
+    sc.tl.leiden(adata,
+                 flavor="igraph",
+                 n_iterations=2,
+                 directed=False)  # cluster the reduced dimensionality data.
+
+    # Let's visualize the umap using the leidne clustering to display the different cell types
+    sc.pl.umap(adata,
+               color=["total_counts",
+                      "n_genes_by_counts",
+                      "leiden",
+                      ],
+               wspace=0.4)
+    # Let's visualize in a scatter map
+    sq.pl.spatial_scatter(adata,
+                          shape=None,
+                          color=[
+                              "leiden",
+                          ], )
+    """
+    From this point clusters can be annotated by differentially expressed genes, e.g., `sc.tl.rank_genes_groups` or
+    by integrating scRNA and transferring labels e.g. Tangram or Harmony
+    """
+    # Annotating clusters
+    ...
+
+    """
+    Computation of spatial statistics - Building the spatial neighbors graphs
+        this example shows how to compute centrality scores, given a spatial graph and cell type annotation
+        scores:
+            - closeness centrality : measure of how close the group is to other nodes
+            - clustering coefficient : measure of the degree to which nodes cluster together
+            - degree centrality : fraction of non-group members connected to group members
+            all scores are descriptive statistics of the spatial graph.
+        In this example we have used leiden algorithm to cluster groups of cells. We will use such clustering to
+        compute the centrality scores.
+    """
+    # sq.gr.spatial_neighbors() evaluate the connectivity matrix from spatial coordinates
+    sq.gr.spatial_neighbors(adata,
+                            coord_type="generic",
+                            delaunay=True,)
+
+    # Compute centrality scores
+    sq.gr.centrality_scores(adata,
+                            cluster_key="leiden")
+    sq.pl.centrality_scores(adata,
+                            cluster_key="leiden",
+                            figsize=(16,5))
+
+    """
+    Computation of spatial statistics - Compute co-occurrence probability
+    The co-occurrence score is defined as:
+        p(exp|cond)/p(exp)
+    where the numerator is the conditional probability of observing a cluster exp conditioned on the presence
+    of a cluster cond, whereas p(exp) is the probability of observing exp in the radius size of interest.
+    """
+    # let's take a subsample (computation costs??) -> co_occurrence creates a (obs x obs) matrix.
+    adata_subsample = sc.pp.subsample(adata,
+                                      fraction=0.5,
+                                      copy=True)
+    # compute co-occurrence
+    sq.gr.co_occurrence(adata_subsample,
+                        cluster_key="leiden",)
+    # show the co-occurrence for a number of clusters that we want
+    sq.pl.co_occurrence(adata_subsample,
+                        cluster_key="leiden",
+                        clusters="12",
+                        figsize=(10,10))
+    sq.pl.spatial_scatter(adata_subsample,
+                          color="leiden",
+                          shape=None,
+                          size=2)
+
+    """
+    Computation of spatial statistics - Neighbors enrichment analysis
+    This example show neighbors enrichment routine. It calculates an enrichment score based on proximity on the
+    connectivity graph of cell clusters. The number of observed events is compared against N permutations and a 
+    z-score is computed.
+    """
+    # compute neighborhood enrichment
+    sq.gr.nhood_enrichment(adata,
+                           cluster_key="leiden",)
+    # visualize
+    fig, ax = plt.subplots(1,2, figsize=(13,7))
+    sq.pl.nhood_enrichment(adata,
+                           cluster_key="leiden",
+                           figsize=(8,8),
+                           title="Neighborhood enrichment adata",
+                           ax=ax[0],)
+    sq.pl.spatial_scatter(adata_subsample,
+                          color="leiden",
+                          shape=None,
+                          size=2,
+                          ax=ax[1])
+
+    """
+    Computation of spatial statistics - Ripley's statistics
+    The Ripley's L function is a descriptive statistics function generally used to determine whether points have a 
+    random, dispersed or clustered distribution pattern at certain scale. 
+    The Ripley's L is a variance-normalized version of the Ripley's K statistic.
+    there are two statistics:
+        - 'G':  monitors the portion of points for which the nearest neighbor is within a given threshold
+                and plots the cumulative percentage against the increasing distance radii.
+        - 'F':  assembles the percentage of points which can be found in the aforemntioned range from an arbitrary point
+                pattern spawned in the expanse of the noticed pattern.
+    """
+    # compute ripley L function with mode, either G or F
+    fig, ax = plt.subplots(1,2,figsize=(15,7))
+    mode="L"
+    sq.gr.ripley(adata,
+                 cluster_key="leiden",
+                 mode=mode)
+    sq.pl.ripley(adata,
+                 cluster_key="leiden",
+                 mode=mode,
+                 ax=ax[0],)
+    sq.pl.spatial_scatter(
+        adata_subsample,
+        color="leiden",
+        groups=["0", "1", "26"],
+        shape=None,
+        size=2,
+        ax=ax[1],
+    )
 
 if __name__ == "__main__":
     tutorialVizgenData(path=VIZGEN_PATH)

@@ -13,3 +13,4 @@ packages:   leidenalg=0.10.2
             pytorch=2.1.2
             python-igraph=0.11.2
             seaborn=0.13.2
+            scikit-misc
