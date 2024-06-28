@@ -8,8 +8,11 @@ import scanpy as sc
 import squidpy as sq
 import seaborn as sns
 import matplotlib.pyplot as plt
+import pandas as pd
+import copy as cp
 
 VIZGEN_PATH = "/home/dati/merfish_mouse_brain/BrainReceptorShowcase/Slice1/Replicate1/"
+VIZGEN_PATH = "/home/dati/merfish_mouse_liver/vz-liver-showcase/Liver1Slice1/"
 
 
 def tutorialMerfishData():
@@ -178,7 +181,7 @@ def tutorialMerfishData():
     plt.show()
 
 
-def tutorialVizgenData(path: str):
+def tutorialSpatialStatistics(path: str):
     """
     In this second tutorial, we will learn how to read VIZGEN DATA. First by using the squidpy utilities.
     The results is an AnnData that we will thoroughly investigate.
@@ -332,14 +335,14 @@ def tutorialVizgenData(path: str):
     # sq.gr.spatial_neighbors() evaluate the connectivity matrix from spatial coordinates
     sq.gr.spatial_neighbors(adata,
                             coord_type="generic",
-                            delaunay=True,)
+                            delaunay=True, )
 
     # Compute centrality scores
     sq.gr.centrality_scores(adata,
                             cluster_key="leiden")
     sq.pl.centrality_scores(adata,
                             cluster_key="leiden",
-                            figsize=(16,5))
+                            figsize=(16, 5))
 
     """
     Computation of spatial statistics - Compute co-occurrence probability
@@ -354,12 +357,12 @@ def tutorialVizgenData(path: str):
                                       copy=True)
     # compute co-occurrence
     sq.gr.co_occurrence(adata_subsample,
-                        cluster_key="leiden",)
+                        cluster_key="leiden", )
     # show the co-occurrence for a number of clusters that we want
     sq.pl.co_occurrence(adata_subsample,
                         cluster_key="leiden",
                         clusters="12",
-                        figsize=(10,10))
+                        figsize=(10, 10))
     sq.pl.spatial_scatter(adata_subsample,
                           color="leiden",
                           shape=None,
@@ -373,14 +376,14 @@ def tutorialVizgenData(path: str):
     """
     # compute neighborhood enrichment
     sq.gr.nhood_enrichment(adata,
-                           cluster_key="leiden",)
+                           cluster_key="leiden", )
     # visualize
-    fig, ax = plt.subplots(1,2, figsize=(13,7))
+    fig, ax = plt.subplots(1, 2, figsize=(13, 7))
     sq.pl.nhood_enrichment(adata,
                            cluster_key="leiden",
-                           figsize=(8,8),
+                           figsize=(8, 8),
                            title="Neighborhood enrichment adata",
-                           ax=ax[0],)
+                           ax=ax[0], )
     sq.pl.spatial_scatter(adata_subsample,
                           color="leiden",
                           shape=None,
@@ -399,15 +402,15 @@ def tutorialVizgenData(path: str):
                 pattern spawned in the expanse of the noticed pattern.
     """
     # compute ripley L function with mode, either G or F
-    fig, ax = plt.subplots(1,2,figsize=(15,7))
-    mode="L"
+    fig, ax = plt.subplots(1, 2, figsize=(15, 7))
+    mode = "L"
     sq.gr.ripley(adata,
                  cluster_key="leiden",
                  mode=mode)
     sq.pl.ripley(adata,
                  cluster_key="leiden",
                  mode=mode,
-                 ax=ax[0],)
+                 ax=ax[0], )
     sq.pl.spatial_scatter(
         adata_subsample,
         color="leiden",
@@ -416,6 +419,251 @@ def tutorialVizgenData(path: str):
         size=2,
         ax=ax[1],
     )
+    """
+    Computation of spatial statistics - Moran's I score
+    The Moran's I global spatial auto-correlation statistics evaluates whether features (i.e., genes) shows a pattern
+    that is clustered, dispersed or random in the tissue are under consideration.
+    """
+    sq.gr.spatial_neighbors(adata_subsample,
+                            coord_type="generic",
+                            delaunay=True, )
+    sq.gr.spatial_autocorr(adata_subsample,
+                           mode="moran",
+                           n_perms=100,  # number of permutations
+                           n_jobs=1, )
+    adata_subsample.uns["moranI"].head(10)
 
+    # We can visualize the top genes and maybe test also Geary C autocorrelation statistic score
+    sq.pl.spatial_scatter(adata_subsample,
+                          color=[
+                              "Slc17a7",
+                              "Npy2r",
+                          ],
+                          size=2,
+                          shape=None,
+                          img=False, )
+    plt.show()
+
+
+def tutorialCellAnnotation():
+    """
+    This is the tutorial in squidpy documentation that is called "Vizgen Mouse Liver Squidpy Vignette".
+    This tutorial is going to need some more libraries to describe the cell types from their clustering.
+    """
+    adata = sq.read.vizgen(path=VIZGEN_PATH,
+                           counts_file="cell_by_gene.csv",
+                           meta_file="cell_metadata.csv",
+                           transformation_file="micron_to_mosaic_pixel_transform.csv", )
+    print(adata)
+
+    # Make genes unique and calculate quality metrics
+    # This is just good practice, to make sure that all genes are unique. In this case they are.
+    adata.var_names_make_unique()
+    adata.var["mt"] = adata.var_names.str.startswith("mt-")
+    sc.pp.calculate_qc_metrics(adata,
+                               percent_top=(50, 100, 200, 300),
+                               inplace=True)
+    # Filter cells with low expression and genes that are expressed in too few cells
+    sc.pp.filter_cells(adata,
+                       min_counts=50, )
+    sc.pp.filter_genes(adata,
+                       min_cells=10, )
+
+    """
+    Data Pre-Processing
+        In this example, we use scanpy total-count normalize, logarithmize and scale gene expression to unit variance
+    """
+    print("\033[36mNormalization... (total-count): \033[37m\n")
+    sc.pp.normalize_total(adata)
+    print("\033[36mLog transformation... (log1p): \033[37m\n")
+    sc.pp.log1p(adata)
+    print("\033[36mScale counts... (rescale to max_value=10): \033[37m\n")
+    sc.pp.scale(adata, max_value=10)  # scale to unit variance and zero mean
+    print("\033[36mDimensionality reduction... (pca): \033[37m\n")
+    sc.pp.pca(adata, svd_solver="arpack")
+    print("\033[36mNeighbor calculations... (): \033[37m\n")
+    sc.pp.neighbors(adata, n_neighbors=10, n_pcs=20)
+    print("\033[36mCompute umap... (): \033[37m\n")
+    sc.tl.umap(adata, )
+    print("\033[36mClustering... (Leiden algorithm): \033[37m\n")
+    sc.tl.leiden(adata,
+                 flavor="igraph",
+                 n_iterations=2,
+                 resolution=1.5)  # resolution is a parameter that tunes the amount of clusters
+    # Let's visualize the reduced dimension with umap and Leiden colors
+    sc.set_figure_params(figsize=(10, 10))
+    sc.pl.umap(adata,
+               color=["leiden"],
+               size=5)
+    """
+    Spatial distribution of cells
+    """
+    sq.pl.spatial_scatter(adata,
+                          color=["leiden"],
+                          size=0.5,
+                          library_id=["spatial"],
+                          shape=None)
+    plt.show()
+
+    """
+    Assign Cell Types - Reference Cell Type Marker Gene Sets
+        In order to tentatively assign liver cell types the examples used a gene-level cell type marker reference from
+        literature. The marker genes can be used to assess cell type composition of the leiden clusters.
+    """
+    gene_panel = "https://static-content.springer.com/esm/art%3A10.1038%2Fs41421-021-00266-1/MediaObjects/41421_2021_266_MOESM1_ESM.xlsx"
+    df_ref_panel_ini = pd.read_excel(gene_panel, index_col=0)  # reading the excel with information about marker genes
+    df_ref_panel = df_ref_panel_ini.iloc[1:, :1]  # skip first row and all other columns than first
+    df_ref_panel.index.name = None  # No index name
+    df_ref_panel.columns = ["Function"]  # Assign column name
+
+    # Assign marker gene metadata using reference
+    marker_genes = df_ref_panel[
+        df_ref_panel["Function"].str.contains("marker")
+    ].index.tolist()
+    meta_gene = cp.deepcopy(adata.var)
+    # Intersect reference knowledge with var names of anndata
+    common_marker_genes = list(set(meta_gene.index.tolist()).intersection(marker_genes))
+    meta_gene.loc[common_marker_genes, "Markers"] = df_ref_panel.loc[
+        common_marker_genes, "Function"
+    ]  # Create a new column "Markers" with the common marker genes in df_ref_panel
+    meta_gene["Markers"] = meta_gene["Markers"].apply(
+        lambda x: "N.A." if "marker" not in str(x) else x
+    )  # if "marker" i keep it, if not i put N.A.
+    print("\033[36mThese are the values of each found marker...\033[37m\n",
+          meta_gene["Markers"].value_counts())
+
+    """
+    Assign Cell Types - Calculate Leiden cluster average expression signatures
+        Here we calculate the average gene expression signatures of the Leiden clusters, which will be used to assign 
+        cell type composition.
+    """
+    ser_counts = adata.obs["leiden"].value_counts()  # how many obs for each cluster
+    ser_counts.name = "cell counts"
+    meta_leiden = pd.DataFrame(ser_counts)
+
+    cat_name = "leiden"  # category name, i.e., a column of observation
+    sig_leiden = pd.DataFrame(columns=adata.var_names,
+                              index=adata.obs[cat_name].cat.categories)  # This is a good way to factorize a column
+
+    # Let's evaluate the average expression of each gene within each leiden cluster independently
+    for clust in adata.obs[cat_name].cat.categories:
+        sig_leiden.loc[clust] = adata[adata.obs[cat_name].isin([clust]), :].X.mean(axis=0)
+    print("\033[36mThis is the shape of the average expression of each gene by cluster...\033[37m\n",
+          sig_leiden.shape)
+
+    # Now the shape of sig_leiden is num_clusters x num_genes. We transpose it
+    sig_leiden = sig_leiden.transpose()
+    # Let's switch the name of the columns to "Leiden-x"
+    leiden_clusters = ["Leiden-" + str(x) for x in sig_leiden.columns.tolist()]
+    sig_leiden.columns = leiden_clusters
+    meta_leiden.index = sig_leiden.columns.tolist()
+    meta_leiden["leiden"] = pd.Series(meta_leiden.index.tolist(),
+                                      index=meta_leiden.index.tolist())
+    print("\033[36mThese are the metadata of the leiden clusters...\033[37m\n",
+          meta_leiden)
+
+    """
+    Assign Cell Types - Assign Cell type based on Top Expressed Marker Genes
+        Here we assign cell type composition to the leiden clusters by counting the frequency of cell type 
+        marker genes in the top 30 most up-regulated genes for each cluster such that cell type is assigned based on
+        the most frequently occuring marker genes. If there is a tie, we assign the cluster to more than one cell type
+    """
+    print("\033[36mThese are the starting point...\033[37m\n",
+          "\tmeta_leiden\n", meta_leiden.describe(), "\n"
+                                                     "\tmeta_gene\n", meta_gene.describe(), "\n")
+    meta_gene = pd.DataFrame(index=sig_leiden.index.tolist())
+    # Let's init meta_gene as a dataframe for each gene with information if it is a marker or not
+    meta_gene["info"] = pd.Series("", index=meta_gene.index.tolist())
+    meta_gene["Markers"] = pd.Series("N.A.", index=sig_leiden.index.tolist())
+    meta_gene.loc[common_marker_genes, "Markers"] = df_ref_panel.loc[common_marker_genes, "Function"]
+    # Let's add a new column to the meta_leiden (clusters metadata)
+    meta_leiden["Cell_Type"] = pd.Series("N.A.", index=meta_leiden.index.tolist())
+    num_top_genes = 30
+    for inst_cluster in sig_leiden.columns.tolist():
+        # find the top 30 genes for each cluster
+        top_genes = (sig_leiden.loc[:, inst_cluster]
+                     .sort_values(ascending=False)
+                     .index.tolist()[:num_top_genes])
+        # Are those 30 genes a marker or not? Use meta_gene to find out
+        inst_ser = meta_gene.loc[top_genes, "Markers"]
+        inst_ser = inst_ser[inst_ser != "N.A."]
+        ser_counts = inst_ser.value_counts()
+
+        max_counts = ser_counts.max()
+
+        # create a string that is the function of the marker gene within the top 30 ones
+        max_cat = "_".join(sorted(ser_counts[ser_counts == max_counts].index.tolist()))
+        max_cat = max_cat.replace(" marker", "").replace(" ", "-")
+        print("\033[36mThe top function category expressed in cluster \033[37m", inst_cluster,
+              "\033[36m and is \033[37m", max_cat)
+        meta_leiden.loc[inst_cluster, "Cell_Type"] = max_cat
+
+    # Rename clusters
+    meta_leiden["name"] = meta_leiden.apply(
+        lambda x: x["Cell_Type"] + "_" + x["leiden"], axis=1
+    )
+    leiden_names = meta_leiden["name"].values.tolist()
+    meta_leiden.index = leiden_names
+    print("\033[36mThese the annotated clusters...\033[37m\n",
+          meta_leiden)
+
+    # Transfer names to cell type labels to single cells
+    leiden_to_cell_type = cp.deepcopy(meta_leiden)
+    leiden_to_cell_type.set_index("leiden", inplace=True)
+    leiden_to_cell_type.index.name=None
+
+    # Transfer to single cells
+    adata.obs["Cell_Type"] = adata.obs["leiden"].apply(
+        lambda x: leiden_to_cell_type.loc["Leiden-"+str(x), "Cell_Type"]
+    )
+    adata.obs["Cluster"] = adata.obs["leiden"].apply(
+        lambda x: leiden_to_cell_type.loc["Leiden-"+str(x), "name"]
+    )
+
+    """
+    Hepatocyte Zonation
+        Hepatocytes ar ethe most abundant cell in the liver and have multiple roles in metabolism,
+        endocrine production, protein synthesis and detoxification.
+        Hepatocytes form complex, radial structures called lobules that contain a central vein surrounded by 
+        peripheral portal veins. Hepatocytes can also be broadly classified as peri-central or peri-portal
+        based on their proximity to central and portal veins. 
+    Hepatocyte Zonation - Central and Portal Blood vessels
+        We can use the gene Vwf to identify endothelial cells that line liver blood vessels. 
+        Plotting Vwf expression level in single cells shows clear enrichment at blood vessel borders. note that
+        Vwf expression can also be used to distinguish artifactual holes/tears in the liver from blood vessels.
+    """
+    sq.pl.spatial_scatter(adata,
+                          color=["Vwf","Axin2"],
+                          cmap="Reds",
+                          shape=None)
+    plt.show()
+    """
+    Hepatocyte Zonation - Distinguishing Peri-Portal and Peri-Central Hepatocytes
+    As Described above, we use the expression of Axin2 as a marker for peri-central hepatocytes.
+    Apparently the Axin2 expression is higher close to central hepatocyte and high but different close to portal
+    """
+    all_hepatocytes_clusters = [x for x in meta_leiden.index.tolist() if "Hepatocyte" in x]
+    sig_leiden.columns = meta_leiden.index.tolist()
+    ser_axin2 = sig_leiden.loc["Axin2", all_hepatocytes_clusters]
+    peri_central = ser_axin2[ser_axin2 > 0].index.tolist()
+    peri_portal = ser_axin2[ser_axin2 <= 0].index.tolist()
+
+    """
+    Hepatocyte Zonation - Distinguishing Peri-Central Hepatocytes
+    """
+    sq.pl.spatial_scatter(adata,
+                          groups=peri_portal,
+                          color="Cluster",
+                          shape=None)
+    plt.show()
+
+    """
+    Neighborhood enrichment
+        In this ection we identify the clusters that are spatially enriched for one another using a neighborhood
+        enrichment test. 
+        This test determines if cells belonging to two different clusters are close to each other more often than expected
+        ...
+        
+    """
 if __name__ == "__main__":
-    tutorialVizgenData(path=VIZGEN_PATH)
+    tutorialCellAnnotation()
