@@ -3,7 +3,7 @@ author: matteo baldan
 date: 28-06-2024
 description: SPARC tutorial - the one on their documentation. We are using MERFISH data and not their VISIUM dataset
 """
-import graphtools
+
 import squidpy as sq
 import scanpy as sc
 import matplotlib.pyplot as plt
@@ -33,11 +33,16 @@ def main():
                                inplace=True)
 
     # visualize the quality of the sample
-    fig, axs = plt.subplots(1, 4, figsize=(15, 4))
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    axs = axs.ravel()
     sns.distplot(adata.obs["total_counts"], kde=False, bins=100, ax=axs[0])
-    sns.distplot(adata.obs["total_counts"][adata.obs["total_counts"] < 1e2], kde=False, bins=40, ax=axs[1])
-    sns.distplot(adata.obs["n_genes_by_counts"], kde=False, bins=60, ax=axs[2])
-    sns.distplot(adata.obs["n_genes_by_counts"][adata.obs["n_genes_by_counts"] < 4e1], kde=False, bins=60, ax=axs[3])
+    axs[0].title.set_text("Total counts within cells\nNcells:78329")
+    sns.distplot(adata.obs["total_counts"][adata.obs["total_counts"] < 1e2], kde=False, bins=100, ax=axs[1])
+    axs[1].title.set_text("Zoom to cells with low counts")
+    sns.distplot(adata.obs["n_genes_by_counts"], kde=False, bins=100, ax=axs[2])
+    axs[2].title.set_text("Num of unique genes per cell")
+    sns.distplot(adata.obs["n_genes_by_counts"][adata.obs["n_genes_by_counts"] < 4e1], kde=False, bins=100, ax=axs[3])
+    axs[3].title.set_text("Zoom to cells with low num of unique genes")
     plt.show()
 
     # filter cells
@@ -111,7 +116,7 @@ def main():
                           layer="rna_sparc",
                           color=["Npy2r",
                                  "Slc17a7",
-                                 "Gabbr2"],
+                                 ],
                           library_id=["spatial"],
                           shape=None)
     plt.show()
