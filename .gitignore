@@ -1,3 +1,6 @@
 .idea/
 figures/
-
+renv/
+media/
+data/
+.Rproj.user
